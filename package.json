@@ -82,7 +82,7 @@
     "@babel/types": "^7.14.9",
     "@sinonjs/fake-timers": "^6.0.1",
     "@webex/eslint-config-base": "^0.8.0",
-    "@webex/webrtc-media": "^1.10.0",
+    "@webex/webrtc-media": "^1.16.1",
     "ampersand-collection": "^2.0.2",
     "ampersand-collection-lodash-mixin": "^4.0.0",
     "ampersand-events": "^2.0.2",
