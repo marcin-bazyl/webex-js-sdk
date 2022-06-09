@@ -12,6 +12,19 @@ video {
   width: 100%;
 }
 
+.remotevideo {
+  border: 2px solid darkgray;
+}
+
+.activeSpeaker {
+  border-color: aqua;
+}
+
+.remoteVideoLabel {
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
 /* Nice defaults */
 h2 {
   font-weight: 500;
@@ -270,4 +283,9 @@ input[type=email]:focus {
 
 .hidden {
   display: none;
+}
+
+aside {
+  height:800px;
+  overflow-y:scroll;
 }
