@@ -30,6 +30,9 @@ const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 const toggleUnifiedMeetings = document.getElementById('toggle-unified-meeting');
 const currentMeetingInfoStatus = document.getElementById('current-meeting-info-status');
 
+// todo: make this dynamic
+const remoteVideoSlotsToMemberIdsMapping = [undefined, undefined, undefined, undefined, undefined];
+
 // Store and Grab `access-token` from localstorage
 if (localStorage.getItem('date') > new Date().getTime()) {
   tokenElm.value = localStorage.getItem('access-token');
@@ -276,6 +279,7 @@ function joinMeeting(meetingId) {
 
   const joinOptions = {
     pin: meetingsJoinPinElm.value,
+    preferTranscoding: false,
     moderator: meetingsJoinModeratorElm.checked,
     moveToResource: false,
     resourceId: webex.devicemanager._pairedDevice ?
@@ -360,7 +364,20 @@ const audioOutputDeviceStatus = document.querySelector('#sd-audio-output-device-
 const videoInputDeviceStatus = document.querySelector('#sd-video-input-device-status');
 
 const meetingStreamsLocalVideo = document.querySelector('#local-video');
-const meetingStreamsRemotelVideo = document.querySelector('#remote-video');
+const meetingStreamsRemoteVideos = [
+  document.querySelector('#remote-video0'),
+  document.querySelector('#remote-video1'),
+  document.querySelector('#remote-video2'),
+  document.querySelector('#remote-video3'),
+  document.querySelector('#remote-video4')
+];
+const nameLabels = [
+  document.querySelector('#remote-video-label0'),
+  document.querySelector('#remote-video-label1'),
+  document.querySelector('#remote-video-label2'),
+  document.querySelector('#remote-video-label3'),
+  document.querySelector('#remote-video-label4')
+];
 const meetingStreamsRemoteAudio = document.querySelector('#remote-audio');
 const meetingStreamsLocalShare = document.querySelector('#local-screenshare');
 const meetingStreamsRemoteShare = document.querySelector('#remote-screenshare');
@@ -397,7 +414,7 @@ function getMediaSettings() {
 const htmlMediaElements = [
   meetingStreamsLocalVideo,
   meetingStreamsLocalShare,
-  meetingStreamsRemotelVideo,
+  ...meetingStreamsRemoteVideos,
   meetingStreamsRemoteShare,
   meetingStreamsRemoteAudio
 ];
@@ -1029,7 +1046,13 @@ function addMedia() {
     // eslint-disable-next-line default-case
     switch (media.type) {
       case 'remoteVideo':
-        meetingStreamsRemotelVideo.srcObject = media.stream;
+        if (media.slotId !== undefined) {
+          console.log(`marcin: got remote video slot : ${media.slotId}`);
+          meetingStreamsRemoteVideos[media.slotId].srcObject = media.stream;
+        }
+        else {
+          meetingStreamsRemoteVideos[0].srcObject = media.stream;
+        }
         break;
       case 'remoteAudio':
         meetingStreamsRemoteAudio.srcObject = media.stream;
@@ -1041,6 +1064,43 @@ function addMedia() {
         meetingStreamsLocalShare.srcObject = media.stream;
         break;
     }
+  });
+
+  meeting.on('media:remoteVideoSources:changed', ({remoteVideoSlots}) => {
+    console.log('marcin4: got media:remoteVideoSources:changed', remoteVideoSlots);
+
+    remoteVideoSlots.forEach((slot, idx) => {
+      remoteVideoSlotsToMemberIdsMapping[idx] = slot.memberId;
+    });
+
+    nameLabels.forEach((label, idx) => {
+      const slot = remoteVideoSlots[idx];
+
+      let name = '';
+
+      if (
+        slot.state !== 'no source' &&
+        slot.state !== 'invalid source'
+      ) {
+        name = this.meeting.members.membersCollection.get(slot.memberId)?.name || '';
+      }
+
+      label.textContent = name;
+    });
+  });
+
+  meeting.on('media:activeSpeakers:changed', (data) => {
+    const speakingMemberIds = data.memberIds;
+
+    console.log('marcin4: got active speakers list: ', data);
+    remoteVideoSlotsToMemberIdsMapping.forEach((memberId, idx) => {
+      if (memberId && speakingMemberIds.includes(memberId)) {
+        meetingStreamsRemoteVideos[idx].classList.add('activeSpeaker');
+      }
+      else {
+        meetingStreamsRemoteVideos[idx].classList.remove('activeSpeaker');
+      }
+    });
   });
 }
 
