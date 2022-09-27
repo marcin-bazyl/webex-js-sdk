@@ -88,7 +88,8 @@ export default class Roap extends StatelessWebexPlugin {
           correlationId: options.correlationId,
           audioMuted: meeting.isAudioMuted(),
           videoMuted: meeting.isVideoMuted(),
-          meetingId: meeting.id
+          meetingId: meeting.id,
+          preferTranscoding: !meeting.isMultistream,
         })
         .then(() => {
           LoggerProxy.logger.log(`Roap:index#sendRoapOK --> ROAP OK sent with seq ${options.seq}`);
@@ -122,7 +123,8 @@ export default class Roap extends StatelessWebexPlugin {
         correlationId: options.correlationId,
         audioMuted: meeting.isAudioMuted(),
         videoMuted: meeting.isVideoMuted(),
-        meetingId: meeting.id
+        meetingId: meeting.id,
+        preferTranscoding: !meeting.isMultistream,
       });
   }
 
@@ -150,7 +152,8 @@ export default class Roap extends StatelessWebexPlugin {
       correlationId: options.correlationId,
       audioMuted: meeting.isAudioMuted(),
       videoMuted: meeting.isVideoMuted(),
-      meetingId: meeting.id
+      meetingId: meeting.id,
+      preferTranscoding: !meeting.isMultistream,
     })
       .then(() => {
         LoggerProxy.logger.log(`Roap:index#sendRoapError --> ROAP ERROR sent with seq ${options.seq}`);
@@ -189,7 +192,8 @@ export default class Roap extends StatelessWebexPlugin {
         mediaId: sendEmptyMediaId ? '' : meeting.mediaId,
         audioMuted: meeting.isAudioMuted(),
         videoMuted: meeting.isVideoMuted(),
-        meetingId: meeting.id
+        meetingId: meeting.id,
+        preferTranscoding: !meeting.isMultistream,
       })
       .then(({locus, mediaConnections}) => {
         if (mediaConnections) {
@@ -199,7 +203,7 @@ export default class Roap extends StatelessWebexPlugin {
         return locus;
       });
   }
-  
+
   /**
      * Performs a TURN server discovery procedure, which involves exchanging
      * some roap messages with the server. This exchange has to be done before
