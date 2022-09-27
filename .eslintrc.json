@@ -1,7 +1,10 @@
 {
   "root": true,
   "extends": "./eslintrules/index.js",
-  "parser": "@babel/eslint-parser",
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint"
+  ],
   "parserOptions": {
     "sourceType": "module",
     "requireConfigFile": true
