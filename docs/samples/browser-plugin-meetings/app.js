@@ -1831,6 +1831,38 @@ function processNewVideoPane(meeting, paneGroupId, paneId, remoteMedia) {
   videoPane.remoteMedia = remoteMedia;
   videoPane.videoEl.srcObject = remoteMedia.stream;
 
+  videoPane.containerEl.onclick = async (ev) => {
+    console.log(`marcin: clicked ${remoteMedia.id} ctrl=${ev.ctrlKey}`);
+
+    const id = remoteMedia.getUnderlyingReceiveSlot().wcmeReceiveSlot._idGetter();
+
+    let ssrc;
+
+    if (id.mid) {
+      const peerConnection = getCurrentMeeting().mediaProperties.webrtcMediaConnection.multistreamConnection.pc.pc;
+
+      const transceiver = peerConnection.getTransceivers().find((transceiver) => transceiver.mid === id.mid);
+
+      const statsResult = await transceiver.receiver.getStats();
+
+      statsResult.forEach((report) => {
+        console.log(`marcin: ${report.type}`);
+        if (report.type === 'inbound-rtp' && !ssrc) {
+          console.log(`marcin: found SSRC: ${report.ssrc}`);
+          ssrc = report.ssrc;
+        }
+      });
+
+      const webrtcInternals = window.open('chrome://webrtc-internals/');
+
+      const tabs = webrtcInternals.document.getElementsByClassName('tab-head');
+
+      tabs.map((tab) => console.log('marcin: tab: ', tab.innerText));
+
+      // pc.getTransceivers()[6].receiver.getStats().then((x) => x.forEach((r) => console.log(r)));
+    }
+  };
+
   // update our UI with the current state of the new remote media instance we got and setup listeners for any changes
   updateVideoPane(videoPane, meeting, remoteMedia.sourceState, remoteMedia.memberId, `${paneGroupId}.${paneId} ${remoteMedia.id}`, 'initialization');
 
