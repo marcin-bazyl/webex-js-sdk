@@ -1834,33 +1834,41 @@ function processNewVideoPane(meeting, paneGroupId, paneId, remoteMedia) {
   videoPane.containerEl.onclick = async (ev) => {
     console.log(`marcin: clicked ${remoteMedia.id} ctrl=${ev.ctrlKey}`);
 
+    const {wcmeReceiveSlot} = remoteMedia.getUnderlyingReceiveSlot();
+
     const id = remoteMedia.getUnderlyingReceiveSlot().wcmeReceiveSlot._idGetter();
+
+    const {multistreamConnection} = getCurrentMeeting().mediaProperties.webrtcMediaConnection;
+    const peerConnection = multistreamConnection.pc.pc;
+
+    const transceiver = multistreamConnection.recvTransceivers.get('VIDEO-MAIN').find((t) => t.receiveSlot === wcmeReceiveSlot);
 
     let ssrc;
 
-    if (id.mid) {
-      const peerConnection = getCurrentMeeting().mediaProperties.webrtcMediaConnection.multistreamConnection.pc.pc;
+    // const transceiver = peerConnection.getTransceivers().find((transceiver) => transceiver.mid === id.mid);
 
-      const transceiver = peerConnection.getTransceivers().find((transceiver) => transceiver.mid === id.mid);
+    const statsResult = await transceiver.receiver.getStats();
 
-      const statsResult = await transceiver.receiver.getStats();
+    statsResult.forEach((report) => {
+      console.log(`marcin: ${report.type}`);
+      if (report.type === 'inbound-rtp' && !ssrc) {
+        console.log(`marcin: found SSRC: ${report.ssrc}`);
+        console.log('marcin: ', report);
+        ssrc = report.ssrc;
+      }
+    });
 
-      statsResult.forEach((report) => {
-        console.log(`marcin: ${report.type}`);
-        if (report.type === 'inbound-rtp' && !ssrc) {
-          console.log(`marcin: found SSRC: ${report.ssrc}`);
-          ssrc = report.ssrc;
-        }
-      });
+    const wcmeStats = await multistreamConnection.statsManager.getStats();
 
-      const webrtcInternals = window.open('chrome://webrtc-internals/');
+    console.log('marcin: wcmeStats=', wcmeStats);
 
-      const tabs = webrtcInternals.document.getElementsByClassName('tab-head');
+    // const webrtcInternals = window.open('chrome://webrtc-internals/');
 
-      tabs.map((tab) => console.log('marcin: tab: ', tab.innerText));
+    // const tabs = webrtcInternals.document.getElementsByClassName('tab-head');
 
-      // pc.getTransceivers()[6].receiver.getStats().then((x) => x.forEach((r) => console.log(r)));
-    }
+    // tabs.map((tab) => console.log('marcin: tab: ', tab.innerText));
+
+    // pc.getTransceivers()[6].receiver.getStats().then((x) => x.forEach((r) => console.log(r)));
   };
 
   // update our UI with the current state of the new remote media instance we got and setup listeners for any changes
