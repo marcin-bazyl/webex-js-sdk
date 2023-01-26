@@ -1236,13 +1236,27 @@ function toggleBNR() {
   }
 }
 
+let publishedLocalShareTrack = null;
+
 async function startScreenShare() {
   const meeting = getCurrentMeeting();
 
   // Using async/await to make code more readable
   console.log('MeetingControls#startScreenShare()');
   try {
-    await meeting.shareScreen();
+    if (isMultistream) {
+      console.log('marcin: starting multistream share');
+      const localShareStream = await navigator.mediaDevices.getDisplayMedia();
+
+      const localShareTrack = localShareStream.getVideoTracks()[0];
+
+      await meeting.media.publishTrack(localShareTrack, 'slides');
+
+      publishedLocalShareTrack = localShareTrack;
+    }
+    else {
+      await meeting.shareScreen();
+    }
     console.log('MeetingControls#startScreenShare() :: Successfully started sharing!');
   }
   catch (error) {
@@ -1256,7 +1270,16 @@ async function stopScreenShare() {
 
   console.log('MeetingControls#stopScreenShare()');
   try {
-    await meeting.stopShare();
+    if (isMultistream) {
+      if (publishedLocalShareTrack) {
+        console.log('marcin: stopping multistream share');
+        await meeting.media.unpublishTrack(publishedLocalShareTrack, 'slides');
+        publishedLocalShareTrack = null;
+      }
+    }
+    else {
+      await meeting.stopShare();
+    }
     console.log('MeetingControls#stopScreenShare() :: Successfully stopped sharing!');
   }
   catch (error) {
@@ -2148,6 +2171,7 @@ function addMedia() {
           meetingStreamsRemoteShare.srcObject = media.stream;
           break;
         case 'localShare':
+          console.log('marcin: media:ready for localShare received: ', media);
           meetingStreamsLocalShare.srcObject = media.stream;
           break;
       }

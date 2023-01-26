@@ -1915,7 +1915,7 @@ export default class Meeting extends StatelessWebexPlugin {
    */
   private setUpLocusMediaSharesListener() {
     // Will get triggered on local and remote share
-    this.locusInfo.on(EVENTS.LOCUS_INFO_UPDATE_MEDIA_SHARES, (payload) => {
+    this.locusInfo.on(EVENTS.LOCUS_INFO_UPDATE_MEDIA_SHARES, async (payload) => {
       const {content: contentShare, whiteboard: whiteboardShare} = payload.current;
       const previousContentShare = payload.previous?.content;
       const previousWhiteboardShare = payload.previous?.whiteboard;
@@ -1948,14 +1948,24 @@ export default class Meeting extends StatelessWebexPlugin {
         contentShare.disposition === FLOOR_ACTION.GRANTED
       ) {
         if (this.mediaProperties.shareTrack?.readyState === 'ended') {
-          this.stopShare({
-            skipSignalingCheck: true,
-          }).catch((error) => {
+          // todo: maybe this needs to be updated for multistream? bazyl
+          // this seems completely wrong anyway, it should be removed
+          console.log('marcin: we need a new FIX!!!!!!!!!!!!!!!!!!!');
+          try {
+            if (this.isMultistream) {
+              await this.media.unpublishTrack(this.mediaProperties.shareTrack);
+              // todo: screenshare audio
+            } else {
+              await this.stopShare({
+                skipSignalingCheck: true,
+              });
+            }
+          } catch (error) {
             LoggerProxy.logger.log(
               'Meeting:index#setUpLocusMediaSharesListener --> Error stopping share: ',
               error
             );
-          });
+          }
         } else {
           // CONTENT - sharing content local
           newShareStatus = SHARE_STATUS.LOCAL_SHARE_ACTIVE;
@@ -2047,19 +2057,25 @@ export default class Meeting extends StatelessWebexPlugin {
               );
             };
 
-            // if a remote participant is stealing the presentation from us
-            if (
-              !this.mediaProperties.mediaDirection?.sendShare ||
-              oldShareStatus === SHARE_STATUS.WHITEBOARD_SHARE_ACTIVE
-            ) {
+            try {
+              // if a remote participant is stealing the presentation from us
+              if (
+                this.mediaProperties.mediaDirection?.sendShare &&
+                oldShareStatus === SHARE_STATUS.LOCAL_SHARE_ACTIVE
+              ) {
+                console.log('marcin: remote stealing from us');
+                if (this.isMultistream) {
+                  await this.media.unpublishTrack(this.mediaProperties.shareTrack);
+                  // todo: screenshare audio
+                } else {
+                  await this.updateShare({
+                    sendShare: false,
+                    receiveShare: this.mediaProperties.mediaDirection.receiveShare,
+                  });
+                }
+              }
+            } finally {
               sendStartedSharingRemote();
-            } else {
-              this.updateShare({
-                sendShare: false,
-                receiveShare: this.mediaProperties.mediaDirection.receiveShare,
-              }).finally(() => {
-                sendStartedSharingRemote();
-              });
             }
             break;
           }
@@ -6003,12 +6019,17 @@ export default class Meeting extends StatelessWebexPlugin {
       Metrics.postEvent({event: eventType.SHARE_STOPPED, meeting: this});
       Media.stopTracks(this.mediaProperties.shareTrack);
 
+      console.log(`marcin: checking: ${content.floor.beneficiary.id} !== ${this.selfId}`);
       if (content.floor.beneficiary.id !== this.selfId) {
         // remote participant started sharing and caused our sharing to stop, we don't want to send any floor action request in that case
         this.isSharing = false;
 
+        console.log('marcin: not sending changeMeetingFloor request');
+
         return Promise.resolve();
       }
+
+      console.log(`marcin: sending changeMeetingFloor content=${JSON.stringify(content)}`);
 
       return this.meetingRequest
         .changeMeetingFloor({
@@ -6512,6 +6533,37 @@ export default class Meeting extends StatelessWebexPlugin {
         stream: localShare,
       }
     );
+  }
+
+  async handleMultistreamShareTrackEnded() {
+    if (this.wirelessShare) {
+      this.leave({reason: MEETING_REMOVED_REASON.USER_ENDED_SHARE_STREAMS});
+    } else {
+      try {
+        if (this.mediaProperties.mediaDirection.sendShare) {
+          await this.releaseScreenShareFloor();
+        }
+      } catch (error) {
+        LoggerProxy.logger.log(
+          'Meeting:index#handleShareTrackEnded --> Error stopping share: ',
+          error
+        );
+      } finally {
+        this.mediaProperties.mediaDirection.sendShare = false;
+
+        Trigger.trigger(
+          this,
+          {
+            file: 'meeting/index',
+            function: 'handleShareTrackEnded',
+          },
+          EVENT_TRIGGERS.MEETING_STOPPED_SHARING_LOCAL,
+          {
+            type: EVENT_TYPES.LOCAL_SHARE,
+          }
+        );
+      }
+    }
   }
 
   /**
