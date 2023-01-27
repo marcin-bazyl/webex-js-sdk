@@ -1953,7 +1953,7 @@ export default class Meeting extends StatelessWebexPlugin {
           console.log('marcin: we need a new FIX!!!!!!!!!!!!!!!!!!!');
           try {
             if (this.isMultistream) {
-              await this.media.unpublishTrack(this.mediaProperties.shareTrack);
+              await this.media.unpublishTracks([this.mediaProperties.shareTrack]);
               // todo: screenshare audio
             } else {
               await this.stopShare({
@@ -2065,7 +2065,7 @@ export default class Meeting extends StatelessWebexPlugin {
               ) {
                 console.log('marcin: remote stealing from us');
                 if (this.isMultistream) {
-                  await this.media.unpublishTrack(this.mediaProperties.shareTrack);
+                  await this.media.unpublishTracks([this.mediaProperties.shareTrack]);
                   // todo: screenshare audio
                 } else {
                   await this.updateShare({
@@ -3111,30 +3111,27 @@ export default class Meeting extends StatelessWebexPlugin {
    * @public
    * @memberof Meeting
    */
-  public setLocalShareTrack(localShare: MediaStream) {
+  public setLocalShareTrack(localShareTrack: MediaStreamTrack) {
     let settings = null;
 
-    if (localShare) {
-      this.mediaProperties.setLocalShareTrack(MeetingUtil.getTrack(localShare).videoTrack);
-      const contentTracks = this.mediaProperties.shareTrack;
+    if (localShareTrack) {
+      this.mediaProperties.setLocalShareTrack(localShareTrack);
 
-      if (contentTracks) {
-        settings = contentTracks.getSettings();
-        this.mediaProperties.setMediaSettings('screen', {
-          aspectRatio: settings.aspectRatio,
-          frameRate: settings.frameRate,
-          height: settings.height,
-          width: settings.width,
-          displaySurface: settings.displaySurface,
-          cursor: settings.cursor,
-        });
-        LoggerProxy.logger.log(
-          'Meeting:index#setLocalShareTrack --> Screen settings.',
-          JSON.stringify(this.mediaProperties.mediaSettings.screen)
-        );
-      }
+      settings = localShareTrack.getSettings();
+      this.mediaProperties.setMediaSettings('screen', {
+        aspectRatio: settings.aspectRatio,
+        frameRate: settings.frameRate,
+        height: settings.height,
+        width: settings.width,
+        displaySurface: settings.displaySurface,
+        cursor: settings.cursor,
+      });
+      LoggerProxy.logger.log(
+        'Meeting:index#setLocalShareTrack --> Screen settings.',
+        JSON.stringify(this.mediaProperties.mediaSettings.screen)
+      );
 
-      contentTracks.onended = () => this.handleShareTrackEnded(localShare);
+      localShareTrack.addEventListener('ended', this.handleShareTrackEnded);
 
       Trigger.trigger(
         this,
@@ -3145,9 +3142,13 @@ export default class Meeting extends StatelessWebexPlugin {
         EVENT_TRIGGERS.MEDIA_READY,
         {
           type: EVENT_TYPES.LOCAL_SHARE,
-          stream: localShare,
+          track: localShareTrack,
         }
       );
+    } else if (this.mediaProperties.shareTrack) {
+      console.log('marcin: unregistering "ended" listner for share track');
+      this.mediaProperties.shareTrack.removeEventListener('ended', this.handleShareTrackEnded); // todo: verify that this works
+      console.log('marcin: after listener removed');
     }
   }
 
@@ -5659,7 +5660,7 @@ export default class Meeting extends StatelessWebexPlugin {
 
     const previousSendShareStatus = this.mediaProperties.mediaDirection.sendShare;
 
-    this.setLocalShareTrack(stream);
+    this.setLocalShareTrack(track);
 
     return MeetingUtil.validateOptions({sendShare, localShare: stream})
       .then(() => this.checkForStopShare(sendShare, previousSendShareStatus))
@@ -5712,7 +5713,7 @@ export default class Meeting extends StatelessWebexPlugin {
     this.video = this.video || createMuteState(VIDEO, this, this.mediaProperties.mediaDirection);
     // Validation is already done in addMedia so no need to check if the lenght is greater then 0
     this.setLocalTracks(localStream);
-    this.setLocalShareTrack(localShare);
+    this.setLocalShareTrack(MeetingUtil.getTrack(localShare).videoTrack);
   }
 
   /**
@@ -6505,9 +6506,22 @@ export default class Meeting extends StatelessWebexPlugin {
    * @param {MediaStream} localShare
    * @returns {undefined}
    */
-  private handleShareTrackEnded(localShare: MediaStream) {
+  private handleShareTrackEnded = async () => {
     if (this.wirelessShare) {
       this.leave({reason: MEETING_REMOVED_REASON.USER_ENDED_SHARE_STREAMS});
+    } else if (this.isMultistream) {
+      try {
+        if (this.mediaProperties.mediaDirection.sendShare) {
+          await this.releaseScreenShareFloor();
+        }
+      } catch (error) {
+        LoggerProxy.logger.log(
+          'Meeting:index#handleShareTrackEnded --> Error stopping share: ',
+          error
+        );
+      } finally {
+        this.mediaProperties.mediaDirection.sendShare = false;
+      }
     } else {
       // Skip checking for a stable peerConnection
       // to allow immediately stopping screenshare
@@ -6530,41 +6544,9 @@ export default class Meeting extends StatelessWebexPlugin {
       EVENT_TRIGGERS.MEETING_STOPPED_SHARING_LOCAL,
       {
         type: EVENT_TYPES.LOCAL_SHARE,
-        stream: localShare,
       }
     );
-  }
-
-  async handleMultistreamShareTrackEnded() {
-    if (this.wirelessShare) {
-      this.leave({reason: MEETING_REMOVED_REASON.USER_ENDED_SHARE_STREAMS});
-    } else {
-      try {
-        if (this.mediaProperties.mediaDirection.sendShare) {
-          await this.releaseScreenShareFloor();
-        }
-      } catch (error) {
-        LoggerProxy.logger.log(
-          'Meeting:index#handleShareTrackEnded --> Error stopping share: ',
-          error
-        );
-      } finally {
-        this.mediaProperties.mediaDirection.sendShare = false;
-
-        Trigger.trigger(
-          this,
-          {
-            file: 'meeting/index',
-            function: 'handleShareTrackEnded',
-          },
-          EVENT_TRIGGERS.MEETING_STOPPED_SHARING_LOCAL,
-          {
-            type: EVENT_TYPES.LOCAL_SHARE,
-          }
-        );
-      }
-    }
-  }
+  };
 
   /**
    * Emits the 'network:quality' event

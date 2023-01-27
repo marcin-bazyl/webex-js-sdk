@@ -1,3 +1,4 @@
+/* eslint-disable valid-jsdoc */
 /* eslint-disable import/prefer-default-export */
 
 import {AUDIO, EVENT_TRIGGERS, EVENT_TYPES, VIDEO} from '../constants';
@@ -31,78 +32,75 @@ export class MultistreamMedia {
     throw new Error('Webrtc media connection is missing');
   }
 
-  private onEndedHandler = () => {
-    console.log('marcin: share track onended fired!');
-    this.meeting.handleMultistreamShareTrackEnded();
-  };
-
   /**
    * Publishes a local track in the meeting
    *
    * @param {MediaStreamTrack} track
    * @returns {Promise}
    */
-  async publishTrack(
-    track: MediaStreamTrack,
-    mediaContent: 'main' | 'slides' = 'main'
-  ): Promise<void> {
-    // todo: mediaContent parameter is just a temp hack until we use classes from webrtc-core
+  async publishTracks(tracks: {
+    microphone?: MediaStreamTrack;
+    camera?: MediaStreamTrack;
+    screenShare: {
+      audio?: MediaStreamTrack; // todo: for now screen share audio is not supported
+      video?: MediaStreamTrack;
+    };
+  }): Promise<void> {
     this.checkMediaConnection();
 
-    if (mediaContent === 'slides') {
+    if (tracks.screenShare?.video) {
       // we are starting a screen share
-      this.meeting.mediaProperties.setLocalShareTrack(track);
-      track.addEventListener('ended', this.onEndedHandler);
-      Trigger.trigger(
-        this.meeting,
-        {
-          file: 'meeting/index',
-          function: 'setLocalShareTrack',
-        },
-        EVENT_TRIGGERS.MEDIA_READY,
-        {
-          type: EVENT_TYPES.LOCAL_SHARE, // todo: do we need this event at all for multistream? I'd rather get rid of it
-          track,
-        }
-      );
+      this.meeting.setLocalShareTrack(tracks.screenShare.video);
+
+      // @ts-ignore
       await this.meeting.requestScreenShareFloor();
       this.meeting.mediaProperties.mediaDirection.sendShare = true;
+
+      await this.meeting.mediaProperties.webrtcMediaConnection.publishTrack(
+        tracks.screenShare.video,
+        'slides'
+      );
     }
 
-    if (mediaContent === 'main') {
+    if (tracks.microphone) {
       // todo: depending on how muting is done with Local tracks, this code here might need to change...
-      if (track.kind === 'audio') {
-        // @ts-ignore
-        this.meeting.setLocalAudioTrack(track);
-        this.meeting.mediaProperties.mediaDirection.sendAudio = true;
+      // @ts-ignore
+      this.meeting.setLocalAudioTrack(tracks.microphone);
+      this.meeting.mediaProperties.mediaDirection.sendAudio = true;
 
-        // todo: initialise mute based on the track mute state
-        // todo: when we use webrtc-core classes, we'll need to listen for LocalTrackEvents.Muted event and call this.audio.handleClientRequest()
+      // todo: initialise mute based on the track mute state
+      // todo: when we use webrtc-core classes, we'll need to listen for LocalTrackEvents.Muted event and call this.audio.handleClientRequest()
 
-        // audio state could be undefined if you have not sent audio before
-        this.meeting.audio =
-          this.meeting.audio ||
-          createMuteState(AUDIO, this.meeting, this.meeting.mediaProperties.mediaDirection);
-      }
+      // audio state could be undefined if you have not sent audio before
+      this.meeting.audio =
+        this.meeting.audio ||
+        createMuteState(AUDIO, this.meeting, this.meeting.mediaProperties.mediaDirection);
 
-      if (track.kind === 'video') {
-        // @ts-ignore
-        this.meeting.setLocalVideoTrack(track);
-        this.meeting.mediaProperties.mediaDirection.sendVideo = true;
-
-        // video state could be undefined if you have not sent video before
-        this.meeting.video =
-          this.meeting.video ||
-          createMuteState(VIDEO, this.meeting, this.meeting.mediaProperties.mediaDirection);
-      }
+      await this.meeting.mediaProperties.webrtcMediaConnection.publishTrack(
+        tracks.microphone,
+        'main'
+      );
     }
 
-    return this.meeting.mediaProperties.webrtcMediaConnection.publishTrack(track, mediaContent);
+    if (tracks.camera) {
+      // @ts-ignore
+      this.meeting.setLocalVideoTrack(tracks.camera);
+      this.meeting.mediaProperties.mediaDirection.sendVideo = true;
+
+      // video state could be undefined if you have not sent video before
+      this.meeting.video =
+        this.meeting.video ||
+        createMuteState(VIDEO, this.meeting, this.meeting.mediaProperties.mediaDirection);
+
+      await this.meeting.mediaProperties.webrtcMediaConnection.publishTrack(tracks.camera, 'main');
+    }
+
+    // todo: transcoded meetings
   }
 
   // todo:
   // local share is not shown in sample app - because the app relies on media:ready event but it's registered only for non-multistream
-  // when stealing etc, the code that handles locus notifications triggers updateShare() - it should instead do unpublish (look for todo comments)
+  // move this all back to meeting/index.ts
 
   /**
    * Unpublishes a local track in the meeting
@@ -110,35 +108,50 @@ export class MultistreamMedia {
    * @param {MediaStreamTrack} track
    * @returns {Promise}
    */
-  async unpublishTrack(track: MediaStreamTrack): Promise<void> {
+  async unpublishTracks(tracks: MediaStreamTrack[]): Promise<void> {
     // todo: see todos in publishTrack() - they all apply here too:
     // muting etc
-    let mediaContent = 'main';
-
     this.checkMediaConnection();
 
-    if (track === this.meeting.mediaProperties.shareTrack) {
-      // todo: screenshare audio
-      console.log('marcin: unpublishing screen share video');
-      mediaContent = 'slides';
-      track.removeEventListener('ended', this.onEndedHandler);
-      // @ts-ignore
-      await this.meeting.releaseScreenShareFloor();
-      this.meeting.mediaProperties.mediaDirection.sendShare = false;
+    const unpublishPromises = [];
+
+    for (const track of tracks) {
+      if (track === this.meeting.mediaProperties.shareTrack) {
+        // todo: screenshare audio
+        console.log('marcin: unpublishing screen share video');
+
+        this.meeting.setLocalShareTrack(null);
+
+        // @ts-ignore
+        this.meeting.releaseScreenShareFloor(); // we ignore the returned promise here on purpose
+        this.meeting.mediaProperties.mediaDirection.sendShare = false;
+
+        unpublishPromises.push(
+          this.meeting.mediaProperties.webrtcMediaConnection.unpublishTrack(track, 'slides')
+        );
+      }
+
+      if (track === this.meeting.mediaProperties.audioTrack) {
+        // @ts-ignore
+        this.meeting.setLocalAudioTrack(null);
+        this.meeting.mediaProperties.mediaDirection.sendAudio = false;
+
+        unpublishPromises.push(
+          this.meeting.mediaProperties.webrtcMediaConnection.unpublishTrack(track, 'main')
+        );
+      }
+
+      if (track === this.meeting.mediaProperties.videoTrack) {
+        // @ts-ignore
+        this.meeting.setLocalVideoTrack(null);
+        this.meeting.mediaProperties.mediaDirection.sendVideo = false;
+
+        unpublishPromises.push(
+          this.meeting.mediaProperties.webrtcMediaConnection.unpublishTrack(track, 'main')
+        );
+      }
     }
 
-    if (track === this.meeting.mediaProperties.audioTrack) {
-      // @ts-ignore
-      this.meeting.setLocalAudioTrack(null);
-      this.meeting.mediaProperties.mediaDirection.sendAudio = false;
-    }
-
-    if (track === this.meeting.mediaProperties.videoTrack) {
-      // @ts-ignore
-      this.meeting.setLocalVideoTrack(null);
-      this.meeting.mediaProperties.mediaDirection.sendVideo = false;
-    }
-
-    await this.meeting.mediaProperties.webrtcMediaConnection.unpublishTrack(track, mediaContent);
+    await Promise.all(unpublishPromises);
   }
 }
