@@ -4681,6 +4681,7 @@ __metadata:
     "@webex/test-helper-retry": "workspace:^"
     "@webex/test-helper-test-users": "workspace:^"
     "@webex/webex-core": "workspace:^"
+    "@webex/webrtc-core": "npm:v1.4.0-beta.2"
     ampersand-collection: "npm:^2.0.2"
     bowser: "npm:^2.11.0"
     btoa: "npm:^1.2.1"
@@ -5178,6 +5179,18 @@ __metadata:
     typed-emitter: "npm:^2.1.0"
     webrtc-adapter: "npm:^8.1.2"
   checksum: 4ad5088bbe3c313026359d522157449687327d845dcbe0de5da757e1b02c61527fcd8a7c84da145df425681fb7761486f248cea957922b283489dca6c8d81612
+  languageName: node
+  linkType: hard
+
+"@webex/webrtc-core@npm:v1.4.0-beta.2":
+  version: 1.4.0-beta.2
+  resolution: "@webex/webrtc-core@npm:1.4.0-beta.2"
+  dependencies:
+    events: "npm:^3.3.0"
+    js-logger: "npm:^1.6.1"
+    typed-emitter: "npm:^2.1.0"
+    webrtc-adapter: "npm:^8.1.2"
+  checksum: 649dd634c13e212eb06ac803f4bf779d4c0bd8c53f9b21a615a692ccf189b0621c140a32794f8015d521cb74c43f1fc9ded159a33029f4e4ab82feb39e6f0f4b
   languageName: node
   linkType: hard
 
