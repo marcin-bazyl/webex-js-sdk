@@ -14,6 +14,7 @@ import {
 } from '@webex/internal-media-core';
 
 import {
+  createCameraTrack,
   LocalTrack,
   LocalCameraTrack,
   LocalDisplayTrack,
@@ -7207,9 +7208,8 @@ export default class Meeting extends StatelessWebexPlugin {
 
       localTrack.on(LocalTrackEvents.Muted, this.localAudioTrackMuteStateHandler);
 
-      // @ts-ignore
       this.mediaProperties.audioTrack.addUnmuteController(() => {
-        console.log('marcin: controller called');
+        console.log('marcin: audio controller called');
 
         return this.audio.isUnmuteAllowed();
       });
@@ -7235,7 +7235,11 @@ export default class Meeting extends StatelessWebexPlugin {
 
       localTrack.on(LocalTrackEvents.Muted, this.localVideoTrackMuteStateHandler);
 
-      // todo: pass the hook
+      this.mediaProperties.videoTrack.addUnmuteController(() => {
+        console.log('marcin: video controller called');
+
+        return this.video.isUnmuteAllowed();
+      });
       await this.mediaProperties.webrtcMediaConnection.publishTrack(
         this.mediaProperties.videoTrack
       );
