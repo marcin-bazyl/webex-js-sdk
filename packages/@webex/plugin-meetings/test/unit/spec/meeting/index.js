@@ -681,8 +681,23 @@ describe('plugin-meetings', () => {
         });
 
         it('should reject if join() fails', async () => {
-          meeting.join = sinon.stub().returns(Promise.reject());
+          const error = new Error('fake');
+          meeting.join = sinon.stub().returns(Promise.reject(error));
           await assert.isRejected(meeting.joinWithMedia({mediaOptions: {allowMediaInLobby: true}}));
+
+          assert.calledWith(Metrics.sendBehavioralMetric,
+            BEHAVIORAL_METRICS.JOIN_WITH_MEDIA_FAILURE,
+            {
+              correlation_id: meeting.correlationId,
+              locus_id: meeting.locusUrl.split('/').pop(),
+              reason: error.message,
+              stack: error.stack,
+              leaveErrorReason: undefined,
+            },
+            {
+              type: error.name,
+            }
+          );
         });
 
         it('should fail if called with allowMediaInLobby:false', async () => {
@@ -695,9 +710,10 @@ describe('plugin-meetings', () => {
         });
 
         it('should call leave() if addMedia fails and ignore leave() failure', async () => {
-          const leaveStub = sinon.stub(meeting, 'leave').rejects(new Error('leave error'));
+          const leaveError = new Error('leave error');
           const addMediaError = new Error('fake addMedia error');
 
+          const leaveStub = sinon.stub(meeting, 'leave').rejects(leaveError);
           meeting.addMedia = sinon.stub().rejects(addMediaError);
 
           await assert.isRejected(
@@ -713,6 +729,20 @@ describe('plugin-meetings', () => {
             resourceId: 'some resource',
             reason: 'joinWithMedia failure',
           });
+
+          assert.calledWith(Metrics.sendBehavioralMetric,
+            BEHAVIORAL_METRICS.JOIN_WITH_MEDIA_FAILURE,
+            {
+              correlation_id: meeting.correlationId,
+              locus_id: meeting.locusUrl.split('/').pop(),
+              reason: addMediaError.message,
+              stack: addMediaError.stack,
+              leaveErrorReason: leaveError.message,
+            },
+            {
+              type: addMediaError.name,
+            }
+          );
         });
       });
 

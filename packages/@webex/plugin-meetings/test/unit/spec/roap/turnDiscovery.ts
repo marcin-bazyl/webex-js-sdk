@@ -676,4 +676,138 @@ describe('TurnDiscovery', () => {
       assert.notCalled(mockRoapRequest.sendRoap);
     });
   });
+
+  describe('generateTurnDiscoveryRequestMessage', () => {
+    let td;
+
+    beforeEach(() => {
+      td = new TurnDiscovery(mockRoapRequest);
+      sinon.stub(td, 'getSkipReason').resolves(undefined);
+    });
+
+    it('generates TURN_DISCOVERY_REQUEST message irrespective of skip reason when called with isForced=true', async () => {
+      td.getSkipReason.resolves('reachability');
+
+      const result = await td.generateTurnDiscoveryRequestMessage(testMeeting, true);
+
+      assert.deepEqual(result, {
+        roapMessage: {
+          messageType: 'TURN_DISCOVERY_REQUEST',
+          version: '2',
+          seq: 0,
+          headers: ['includeAnswerInHttpResponse', 'noOkInTransaction'],
+        },
+        turnDiscoverySkippedReason: undefined,
+      });
+    });
+
+    it('takes into account skip reason when called with isForced=false', async () => {
+      td.getSkipReason.resolves('reachability');
+
+      const result = await td.generateTurnDiscoveryRequestMessage(testMeeting, false);
+
+      assert.deepEqual(result, {
+        roapMessage: undefined,
+        turnDiscoverySkippedReason: 'reachability',
+      });
+    });
+
+    it('generates TURN_DISCOVERY_REQUEST message if there is no skip reason when called with isForced=false', async () => {
+      const result = await td.generateTurnDiscoveryRequestMessage(testMeeting, false);
+
+      assert.deepEqual(result, {
+        roapMessage: {
+          messageType: 'TURN_DISCOVERY_REQUEST',
+          version: '2',
+          seq: 0,
+          headers: ['includeAnswerInHttpResponse', 'noOkInTransaction'],
+        },
+        turnDiscoverySkippedReason: undefined,
+      });
+    });
+
+    it('returns "already in progress" if TURN_DISCOVERY_REQUEST was already generated', async () => {
+      // 1st call
+      await td.generateTurnDiscoveryRequestMessage(testMeeting, true);
+
+      // 2nd call
+      const result = await td.generateTurnDiscoveryRequestMessage(testMeeting, true);
+
+      assert.deepEqual(result, {
+        roapMessage: undefined,
+        turnDiscoverySkippedReason: 'already in progress',
+      });
+    });
+
+    it('returns "already in progress" if doTurnDiscovery was called and not completed', async () => {
+      let promiseResolve;
+
+      // set it up so that doTurnDiscovery doesn't complete
+      mockRoapRequest.sendRoap = sinon.fake.returns(new Promise((resolve) => {
+        promiseResolve = resolve;
+      }));
+      td.doTurnDiscovery(testMeeting, false, true);
+
+      // now call generateTurnDiscoveryRequestMessage
+      const result = await td.generateTurnDiscoveryRequestMessage(testMeeting, true);
+
+      assert.deepEqual(result, {
+        roapMessage: undefined,
+        turnDiscoverySkippedReason: 'already in progress',
+      });
+
+      // resolve the promise, just so that we don't leave it hanging
+      promiseResolve();
+    });
+  });
+
+  describe('handleTurnDiscoveryHttpResponse', () => {
+    let td;
+
+    beforeEach(() => {
+      td = new TurnDiscovery(mockRoapRequest);
+    });
+
+    it('works as expected when called with undefined httpResponse', async () => {
+      const result = await td.handleTurnDiscoveryHttpResponse(testMeeting, undefined);
+
+      assert.deepEqual(result, {
+        turnServerInfo: undefined,
+        turnDiscoverySkippedReason: 'missing http response',
+      });
+    });
+
+    [
+      {testCase: 'is missing mediaConnections', httpResponse: {}},
+      {testCase: 'is missing mediaConnections[0]', httpResponse: {mediaConnections: []}},
+      {testCase: 'is missing mediaConnections[0].remoteSdp', httpResponse: {mediaConnections: [{}]}},
+      {testCase: 'is missing roapMesssage in mediaConnections[0].remoteSdp', httpResponse: {mediaConnections: [{remoteSdp: JSON.stringify({something: "whatever"})}]}},
+    ].forEach(({testCase, httpResponse}) => {
+      it(`handles httpResponse that ${testCase}`, async () => {
+        const result = await td.handleTurnDiscoveryHttpResponse(testMeeting, httpResponse);
+
+        assert.deepEqual(result, {
+          turnServerInfo: undefined,
+          turnDiscoverySkippedReason: 'missing http response',
+        });
+      });
+      });
+
+      it('handles httpResponse with invalid JSON in mediaConnections[0].remoteSdp', async () => {
+        const result = await td.handleTurnDiscoveryHttpResponse(testMeeting, {mediaConnections: [{remoteSdp: 'not a json'}]});
+
+        assert.deepEqual(result, {
+          turnServerInfo: undefined,
+          turnDiscoverySkippedReason: 'failure: Unexpected token o in JSON at position 1',
+        });
+      });
+
+      it('works as expected when called with valid httpResponse', async () => {
+        // todo
+      });
+
+      it('works as expected when httpResponse is missing some headers', async () => {
+        // todo
+      });
+  })
 });

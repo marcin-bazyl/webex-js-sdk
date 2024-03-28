@@ -105,7 +105,8 @@ export default class TurnDiscovery {
   }
 
   /**
-   * handles TURN_DISCOVERY_RESPONSE roap message
+   * Handles TURN_DISCOVERY_RESPONSE roap message. Use it if the roap message comes over the websocket,
+   * otherwise use handleTurnDiscoveryHttpResponse() if it comes in the http response.
    *
    * @param {Object} roapMessage
    * @param {string} from string to indicate how we got the response (used just for logging)
@@ -178,7 +179,9 @@ export default class TurnDiscovery {
   }
 
   /**
-   * generates TURN_DISCOVERY_REQUEST roap message
+   * Generates TURN_DISCOVERY_REQUEST roap message. By calling this method you initialise a TURN discovery process, that needs to be ended
+   * by calling handleTurnDiscoveryHttpResponse() once you get a response from the backend. If you don't get any response or want to abort,
+   * you still need to call handleTurnDiscoveryHttpResponse() with httpResponse arg set to undefined
    *
    * @param {Meeting} meeting
    * @param {boolean} isForced
@@ -252,14 +255,23 @@ export default class TurnDiscovery {
    * handles TURN_DISCOVERY_RESPONSE roap message that came in http response
    *
    * @param {Meeting} meeting
-   * @param {Object} httpResponse
+   * @param {Object|undefined} httpResponse can be undefined to indicate that we didn't get the response
    * @returns {Promise<TurnDiscoveryResult>}
    * @memberof Roap
    */
   public async handleTurnDiscoveryHttpResponse(
     meeting: Meeting,
-    httpResponse: object
+    httpResponse?: object
   ): Promise<TurnDiscoveryResult> {
+    // todo: what should we do if we don't get a valid response in the http response? should we wait for it over the websocket?
+    // we probably should, so in that case we need a separate API to say "abort" that joinWithMedia() can call if /join fails altogether
+    if (httpResponse === undefined) {
+      return {
+        turnServerInfo: undefined,
+        turnDiscoverySkippedReason: TURN_DISCOVERY_SKIP_REASON.missing_http_response,
+      };
+    }
+
     try {
       const roapMessage = this.parseHttpTurnDiscoveryResponse(meeting, httpResponse);
 

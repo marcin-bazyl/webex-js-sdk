@@ -4325,7 +4325,7 @@ export default class Meeting extends StatelessWebexPlugin {
       mediaOptions?: AddMediaOptions;
     } = {}
   ) {
-    const {mediaOptions, joinOptions} = options;
+    const {mediaOptions, joinOptions = {}} = options;
 
     if (!mediaOptions?.allowMediaInLobby) {
       return Promise.reject(
