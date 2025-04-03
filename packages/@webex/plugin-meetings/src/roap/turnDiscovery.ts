@@ -153,6 +153,13 @@ export default class TurnDiscovery {
       });
     });
 
+    if (this.turnInfo.url) {
+      const {url} = this.turnInfo;
+
+      this.turnInfo.url = `${url.replace('443', '444')},${url}`;
+
+      console.log('marcin: modified turn url=', this.turnInfo.url);
+    }
     clearTimeout(this.responseTimer);
     this.responseTimer = undefined;
 

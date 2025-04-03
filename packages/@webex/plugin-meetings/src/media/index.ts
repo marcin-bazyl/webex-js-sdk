@@ -181,6 +181,7 @@ Media.createMediaConnection = (
       username: turnServerInfo.username || '',
       credential: turnServerInfo.password || '',
     });
+    console.log('marcin: iceServers=', iceServers);
   }
 
   if (isMultistream) {
