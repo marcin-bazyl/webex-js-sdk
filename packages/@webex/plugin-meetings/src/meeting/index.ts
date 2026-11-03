@@ -2927,7 +2927,8 @@ export default class Meeting extends StatelessWebexPlugin {
 
   /**
    * Drives the E2EE MLS lifecycle from self-state changes for this WDM device:
-   * join once the device is JOINED, leave when it is moved back into the lobby.
+   * join once the device is JOINED, and leave when it is no longer joined or is moved back into
+   * the lobby.
    * @param {Object} payload the LOCUS_INFO_UPDATE_SELF payload (oldSelf, newSelf)
    * @returns {undefined}
    * @private
@@ -2957,7 +2958,23 @@ export default class Meeting extends StatelessWebexPlugin {
     const wasDeviceUnadmitted = payload.oldSelf?.isUserUnadmitted === true;
     const isDeviceUnadmitted = payload.newSelf?.isUserUnadmitted === true;
 
-    if (!wasDeviceUnadmitted && isDeviceUnadmitted) {
+    // MOVED means this Locus is no longer the user's meeting (for example, they entered a
+    // breakout session). Leave the old Locus's MLS group even if joinedWith is missing from the
+    // update. A destination Locus will start its own MLS session once this device is JOINED there.
+    const isDeviceMoved =
+      payload.newSelf?.reason === 'MOVED' ||
+      payload.newSelf?.joinedWith?.reason === 'MOVED' ||
+      payload.newSelf?.devices?.some(
+        (device) => device.url === this.deviceUrl && device.reason === 'MOVED'
+      );
+
+    // A joinedWith transition away from JOINED covers host removals and server-side drops
+    // (including INACTIVE and MEDIA_RELEASED). Avoid stopping for ordinary media/ICE reconnects
+    // while Locus still reports this WDM device as joined.
+    const wasDeviceDropped = wasDeviceJoined && !isDeviceJoined;
+    const wasMovedBackToLobby = !wasDeviceUnadmitted && isDeviceUnadmitted;
+
+    if (wasDeviceDropped || isDeviceMoved || wasMovedBackToLobby) {
       this.e2ee?.stop().catch((error) => {
         LoggerProxy.logger.error(
           'Meeting:index#updateE2eeOnSelfChange --> E2EE stop failed',

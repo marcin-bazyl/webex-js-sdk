@@ -369,6 +369,12 @@ const MeetingUtil = {
     meeting.getWebexObject().internal.device.meetingEnded();
     meeting.stopPeriodicLogUpload();
 
+    // Meetings destroyed by Locus/server updates do not pass through clearMeetingData(). Always
+    // leave MLS during cleanup so a removed meeting cannot retain an active group session.
+    const stopE2ee = meeting.e2ee?.stop().catch((error) => {
+      LoggerProxy.logger.error('Meeting:util#cleanUp --> E2EE stop failed', error);
+    });
+
     meeting.breakouts.cleanUp();
     meeting.webinar.cleanUp();
     meeting.simultaneousInterpretation.cleanUp();
@@ -383,7 +389,8 @@ const MeetingUtil = {
       ? meeting.statsAnalyzer.stopAnalyzer()
       : Promise.resolve();
 
-    return stopStatsAnalyzer
+    return Promise.resolve(stopE2ee)
+      .then(() => stopStatsAnalyzer)
       .then(() => meeting.closeRemoteStreams())
       .then(() => meeting.closePeerConnections())
       .then(() => {

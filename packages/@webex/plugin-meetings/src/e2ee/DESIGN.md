@@ -676,14 +676,19 @@ to surface the meeting's zero-trust state.
     `newSelf.joinedWith.state === JOINED`) → `this.e2ee.start()`. Gating on `joinedWith` for `this.deviceUrl`,
     not the aggregate `self.state`, avoids joining when another device for the same user joins; lobby/pre-join
     selves are never `JOINED`.
-  - **Leave** when the host moves this device back into the lobby (`oldSelf.isUserUnadmitted !== true`,
-    `newSelf.isUserUnadmitted === true`) → `this.e2ee.stop()`. `stop()` is a silent no-op while `disabled`
-    (never started), and resets to `left` so a later re-admit re-runs `start()`.
+  - **Leave** when this device transitions away from `joinedWith.state === JOINED`, when the self
+    state reports `MOVED`, or when the host moves this device back into the lobby
+    (`oldSelf.isUserUnadmitted !== true`, `newSelf.isUserUnadmitted === true`) → `this.e2ee.stop()`.
+    This covers host removal, server-side inactivity/media release, and moves to another Locus such
+    as a breakout. `stop()` is a silent no-op while `disabled` (never started), and resets to `left`
+    so a later rejoin or destination-Locus join can re-run `start()`.
   - `start()`/`stop()` are idempotent and self-guarded, so the edge checks only keep logs clean.
 - `createMediaConnection()`: after `setMediaPeerConnection(mc)`, call
   `this.e2ee.attachMediaConnection(this.mediaProperties.webrtcMediaConnection)`.
 - `closePeerConnections()`: `this.e2ee.detachMediaConnection()` before `mc.close()`.
 - `clearMeetingData()`: `await this.e2ee.stop()`.
+- `MeetingUtil.cleanUp()`: also stops E2EE for meetings destroyed by Locus/server updates, which do
+  not pass through `clearMeetingData()`.
 - E2EE facade methods and state are accessed through `meeting.e2ee` (for example,
   `meeting.e2ee.getSecurityCode()`, `meeting.e2ee.state`, and
   `meeting.e2ee.hasUntrustedMediaServices`). E2EE facade events are forwarded by `Meeting.forwardEvent()`
